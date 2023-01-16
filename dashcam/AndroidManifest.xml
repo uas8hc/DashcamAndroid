@@ -6,6 +6,8 @@
       android:versionName="1.0">
     <uses-sdk android:minSdkVersion="9" android:targetSdkVersion="33"
         tools:ignore="GradleOverrides" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-feature android:glEsVersion="0x00020000"/>
     <application android:label="@string/app_name"
                  android:icon="@drawable/gstreamer_logo_3">

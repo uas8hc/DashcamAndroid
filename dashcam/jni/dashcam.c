@@ -24,15 +24,22 @@ GST_DEBUG_CATEGORY_STATIC (debug_category);
 #endif
 
 /* Structure to contain all our information, so we can pass it to callbacks */
-typedef struct _CustomData
+typedef struct CustomDataStruct
 {
-  jobject app;                  /* Application instance, used to call its methods. A global reference is kept. */
-  GstElement *pipeline;         /* The running pipeline */
-  GMainContext *context;        /* GLib context used to run the main loop */
-  GMainLoop *main_loop;         /* GLib main loop */
-  gboolean initialized;         /* To avoid informing the UI multiple times about the initialization */
-  GstElement *video_sink;       /* The video sink element which receives XOverlay commands */
-  ANativeWindow *native_window; /* The Android native window where video will be rendered */
+    jobject app;                  /* Application instance, used to call its methods. A global reference is kept. */
+    GMainContext *context;        /* GLib context used to run the main loop */
+    GMainLoop *main_loop;         /* GLib main loop */
+    gboolean initialized;         /* To avoid informing the UI multiple times about the initialization */
+    GstElement *video_sink;       /* The video sink element which receives XOverlay commands */
+    ANativeWindow *native_window; /* The Android native window where video will be rendered */
+
+    GstElement *pipeline;
+    GstElement *source;
+    GstElement *filter;
+    GstElement *convert;
+    GstElement *decoder;
+    GstElement *queue;
+    GstElement *sink;
 } CustomData;
 
 /* These global variables cache values which are not changing during execution */
@@ -166,72 +173,101 @@ check_initialization_complete (CustomData * data)
 static void *
 app_function (void *userdata)
 {
-  JavaVMAttachArgs args;
-  GstBus *bus;
-  CustomData *data = (CustomData *) userdata;
-  GSource *bus_source;
-  GError *error = NULL;
+    JavaVMAttachArgs args;
+    GstBus *bus;
+    GstCaps *filtercaps;
+    CustomData *data = (CustomData *) userdata;
+    GSource *bus_source;
+    GError *error = NULL;
 
-  GST_DEBUG ("Creating pipeline in CustomData at %p", data);
+    GST_DEBUG ("Creating pipeline in CustomData at %p", data);
 
-  /* Create our own GLib Main Context and make it the default one */
-  data->context = g_main_context_new ();
-  g_main_context_push_thread_default (data->context);
+    /* Create our own GLib Main Context and make it the default one */
+    data->context = g_main_context_new ();
+    g_main_context_push_thread_default (data->context);
 
-  /* Build pipeline */
-  data->pipeline =
-      gst_parse_launch ("videotestsrc ! warptv ! videoconvert ! autovideosink",
-      &error);
-  if (error) {
-    gchar *message =
-        g_strdup_printf ("Unable to build pipeline: %s", error->message);
-    g_clear_error (&error);
-    set_ui_message (message, data);
-    g_free (message);
+    /* Create the elements */
+    data->source = gst_element_factory_make ("udpsrc", "source");
+    data->filter = gst_element_factory_make ("capsfilter", "filter");
+    data->convert = gst_element_factory_make("rtph264depay", "convert");
+    data->decoder = gst_element_factory_make("avdec_h264", "decoder");
+    data->queue = gst_element_factory_make("queue", "queue");
+    data->sink = gst_element_factory_make ("autovideosink", "sink");
+
+    /* Create the empty pipeline */
+    data->pipeline = gst_pipeline_new ("pipeline");
+
+    if ((!data->pipeline) || (!data->source)  || (!data->sink)  || (!data->decoder)  || (!data->queue)  || (!data->filter)  || (!data->convert))
+    {
+      GST_DEBUG ("All elements could not be created");
+      return NULL;
+    }
+
+    GST_DEBUG ("All elements could be created");
+    /* Build the pipeline */
+    gst_bin_add_many (GST_BIN (data->pipeline), data->source, data->filter, data->convert, data->decoder, data->queue, data->sink, NULL);
+    if (gst_element_link_many (data->source, data->filter, data->convert, data->decoder, data->queue, data->sink, NULL) != TRUE) {
+        GST_ERROR ("Elements could not be linked");
+        gst_object_unref (data->pipeline);
+        return NULL;
+    }else{
+        GST_DEBUG ("Elements could be linked");
+    }
+
+    /* Modify the source's properties */
+    g_object_set (data->source,
+                  "address", "192.168.0.120", "port", 6004,
+                  NULL);
+    filtercaps = gst_caps_new_simple (
+      "application/x-rtp",
+      "media", G_TYPE_STRING, "video",
+      "clock-rate", G_TYPE_INT, 90000,
+      "encoding-name", G_TYPE_STRING, "H264",
+      "payload", G_TYPE_INT, 96,
+      NULL);
+    g_object_set (data->filter, "caps", filtercaps, NULL);
+    gst_caps_unref (filtercaps);
+
+    /* Set the pipeline to READY, so it can already accept a window handle, if we have one */
+    gst_element_set_state (data->pipeline, GST_STATE_READY);
+
+    data->video_sink =
+            gst_bin_get_by_interface (GST_BIN (data->pipeline),
+                                      GST_TYPE_VIDEO_OVERLAY);
+    if (!data->video_sink) {
+        GST_ERROR ("Could not retrieve video sink");
+        return NULL;
+    }
+
+    /* Instruct the bus to emit signals for each received message, and connect to the interesting signals */
+    bus = gst_element_get_bus (data->pipeline);
+    bus_source = gst_bus_create_watch (bus);
+    g_source_set_callback (bus_source, (GSourceFunc) gst_bus_async_signal_func,
+                           NULL, NULL);
+    g_source_attach (bus_source, data->context);
+    g_source_unref (bus_source);
+    g_signal_connect (G_OBJECT (bus), "message::error", (GCallback) error_cb,
+                      data);
+    g_signal_connect (G_OBJECT (bus), "message::state-changed",
+                      (GCallback) state_changed_cb, data);
+    gst_object_unref (bus);
+
+    /* Create a GLib Main Loop and set it to run */
+    GST_DEBUG ("Entering main loop... (CustomData:%p)", data);
+    data->main_loop = g_main_loop_new (data->context, FALSE);
+    check_initialization_complete (data);
+    g_main_loop_run (data->main_loop);
+    GST_DEBUG ("Exited main loop");
+    g_main_loop_unref (data->main_loop);
+    data->main_loop = NULL;
+
+    /* Free resources */
+    g_main_context_pop_thread_default (data->context);
+    g_main_context_unref (data->context);
+    gst_element_set_state (data->pipeline, GST_STATE_NULL);
+    gst_object_unref (data->pipeline);
+
     return NULL;
-  }
-
-  /* Set the pipeline to READY, so it can already accept a window handle, if we have one */
-  gst_element_set_state (data->pipeline, GST_STATE_READY);
-
-  data->video_sink =
-      gst_bin_get_by_interface (GST_BIN (data->pipeline),
-      GST_TYPE_VIDEO_OVERLAY);
-  if (!data->video_sink) {
-    GST_ERROR ("Could not retrieve video sink");
-    return NULL;
-  }
-
-  /* Instruct the bus to emit signals for each received message, and connect to the interesting signals */
-  bus = gst_element_get_bus (data->pipeline);
-  bus_source = gst_bus_create_watch (bus);
-  g_source_set_callback (bus_source, (GSourceFunc) gst_bus_async_signal_func,
-      NULL, NULL);
-  g_source_attach (bus_source, data->context);
-  g_source_unref (bus_source);
-  g_signal_connect (G_OBJECT (bus), "message::error", (GCallback) error_cb,
-      data);
-  g_signal_connect (G_OBJECT (bus), "message::state-changed",
-      (GCallback) state_changed_cb, data);
-  gst_object_unref (bus);
-
-  /* Create a GLib Main Loop and set it to run */
-  GST_DEBUG ("Entering main loop... (CustomData:%p)", data);
-  data->main_loop = g_main_loop_new (data->context, FALSE);
-  check_initialization_complete (data);
-  g_main_loop_run (data->main_loop);
-  GST_DEBUG ("Exited main loop");
-  g_main_loop_unref (data->main_loop);
-  data->main_loop = NULL;
-
-  /* Free resources */
-  g_main_context_pop_thread_default (data->context);
-  g_main_context_unref (data->context);
-  gst_element_set_state (data->pipeline, GST_STATE_NULL);
-  gst_object_unref (data->video_sink);
-  gst_object_unref (data->pipeline);
-
-  return NULL;
 }
 
 /*
