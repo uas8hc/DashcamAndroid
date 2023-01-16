@@ -40,6 +40,8 @@ typedef struct CustomDataStruct
     GstElement *decoder;
     GstElement *queue;
     GstElement *sink;
+
+    gchar *ip;
 } CustomData;
 
 /* These global variables cache values which are not changing during execution */
@@ -214,9 +216,11 @@ app_function (void *userdata)
         GST_DEBUG ("Elements could be linked");
     }
 
+    GST_DEBUG("DEVICE IP: [%s]", data->ip);
+
     /* Modify the source's properties */
     g_object_set (data->source,
-                  "address", "192.168.0.120", "port", 6004,
+                  "address", data->ip, "port", 6004,
                   NULL);
     filtercaps = gst_caps_new_simple (
       "application/x-rtp",
@@ -276,7 +280,7 @@ app_function (void *userdata)
 
 /* Instruct the native code to create its internal data structure, pipeline and thread */
 static void
-gst_native_init (JNIEnv * env, jobject thiz)
+gst_native_init (JNIEnv * env, jobject thiz, jstring ip)
 {
   CustomData *data = g_new0 (CustomData, 1);
   SET_CUSTOM_DATA (env, thiz, custom_data_field_id, data);
@@ -285,6 +289,7 @@ gst_native_init (JNIEnv * env, jobject thiz)
   gst_debug_set_threshold_for_name ("dashcam", GST_LEVEL_DEBUG);
   GST_DEBUG ("Created CustomData at %p", data);
   data->app = (*env)->NewGlobalRef (env, thiz);
+  data->ip = (*env)->GetStringUTFChars(env, ip, NULL);
   GST_DEBUG ("Created GlobalRef for app object at %p", data->app);
   pthread_create (&gst_app_thread, NULL, &app_function, data);
 }
@@ -404,7 +409,7 @@ gst_native_surface_finalize (JNIEnv * env, jobject thiz)
 
 /* List of implemented native methods */
 static JNINativeMethod native_methods[] = {
-  {"nativeInit", "()V", (void *) gst_native_init},
+  {"nativeInit", "(Ljava/lang/String;)V", (void *) gst_native_init},
   {"nativeFinalize", "()V", (void *) gst_native_finalize},
   {"nativePlay", "()V", (void *) gst_native_play},
   {"nativePause", "()V", (void *) gst_native_pause},

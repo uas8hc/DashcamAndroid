@@ -1,5 +1,7 @@
 package org.freedesktop.gstreamer.dashcam;
 
+import android.net.wifi.WifiManager;
+import android.text.format.Formatter;
 import android.app.Activity;
 import android.os.Bundle;
 import android.util.Log;
@@ -14,7 +16,7 @@ import android.widget.Toast;
 import org.freedesktop.gstreamer.GStreamer;
 
 public class Dashcam extends Activity implements SurfaceHolder.Callback {
-    private native void nativeInit();     // Initialize native code, build pipeline, etc
+    private native void nativeInit(String ip);     // Initialize native code, build pipeline, etc
     private native void nativeFinalize(); // Destroy pipeline and shutdown native code
     private native void nativePlay();     // Set pipeline to PLAYING
     private native void nativePause();    // Set pipeline to PAUSED
@@ -24,6 +26,7 @@ public class Dashcam extends Activity implements SurfaceHolder.Callback {
     private long native_custom_data;      // Native code will use this to keep private data
 
     private boolean is_playing_desired;   // Whether the user asked to go to PLAYING
+    private String localIp;
 
     // Called when the activity is first created.
     @Override
@@ -41,6 +44,10 @@ public class Dashcam extends Activity implements SurfaceHolder.Callback {
         }
 
         setContentView(R.layout.main);
+
+        // display public ip address
+        TextView textViewIp = (TextView)this.findViewById(R.id.textView_ip);
+        textViewIp.setText("IP: [" + this.getDeviceIP() + "]\nMac: [" + this.getDeviceMac() + "]");
 
         ImageButton play = (ImageButton) this.findViewById(R.id.button_play);
         play.setOnClickListener(new OnClickListener() {
@@ -74,7 +81,7 @@ public class Dashcam extends Activity implements SurfaceHolder.Callback {
         this.findViewById(R.id.button_play).setEnabled(false);
         this.findViewById(R.id.button_stop).setEnabled(false);
 
-        nativeInit();
+        nativeInit(this.getDeviceIP());
     }
 
     protected void onSaveInstanceState (Bundle outState) {
@@ -140,4 +147,13 @@ public class Dashcam extends Activity implements SurfaceHolder.Callback {
         nativeSurfaceFinalize ();
     }
 
+    public String getDeviceIP() {
+        WifiManager wifi_manager = (WifiManager)getApplicationContext().getSystemService(WIFI_SERVICE);
+        return Formatter.formatIpAddress(wifi_manager.getConnectionInfo().getIpAddress());
+    }
+
+    public String getDeviceMac() {
+        WifiManager wifi_manager = (WifiManager)getApplicationContext().getSystemService(WIFI_SERVICE);
+        return wifi_manager.getConnectionInfo().getMacAddress();
+    }
 }
