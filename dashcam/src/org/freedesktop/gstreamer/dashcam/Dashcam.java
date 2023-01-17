@@ -1,5 +1,6 @@
 package org.freedesktop.gstreamer.dashcam;
 
+import android.annotation.SuppressLint;
 import android.net.wifi.WifiManager;
 import android.text.format.Formatter;
 import android.app.Activity;
@@ -12,6 +13,15 @@ import android.view.View.OnClickListener;
 import android.widget.ImageButton;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.Button;
+import android.widget.EditText;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
+import java.net.Socket;
+import java.util.Objects;
 
 import org.freedesktop.gstreamer.GStreamer;
 
@@ -26,9 +36,22 @@ public class Dashcam extends Activity implements SurfaceHolder.Callback {
     private long native_custom_data;      // Native code will use this to keep private data
 
     private boolean is_playing_desired;   // Whether the user asked to go to PLAYING
-    private String localIp;
+
+    private PrintWriter m_outputWriter;
+    private BufferedReader m_inputReader;
+    private final String SERVER_IP = "192.168.0.104";
+    private final int SERVER_PORT = 4444;
+    EditText editFieldIp, editFieldPort, editMessage;
+    TextView textviewSocket;
+    Button btnSend, btnConnect, btnDisconnect;
+    Thread connectThread = null;
+    Thread writeThread = null;
+    Socket socket;
+//    private Socket client;
+//    private PrintWriter printwriter;
 
     // Called when the activity is first created.
+    @SuppressLint("SetTextI18n")
     @Override
     public void onCreate(Bundle savedInstanceState)
     {
@@ -45,9 +68,72 @@ public class Dashcam extends Activity implements SurfaceHolder.Callback {
 
         setContentView(R.layout.main);
 
+        editFieldIp = (EditText) findViewById(R.id.editFieldIp);
+        editFieldPort = (EditText) findViewById(R.id.eidtFieldPort);
+        textviewSocket = (TextView) findViewById(R.id.textViewSocket);
+        editMessage = (EditText) findViewById(R.id.editMessage);
+        btnSend = (Button) findViewById(R.id.btnSend);
+        btnConnect = (Button) findViewById(R.id.btnConnect);
+        btnDisconnect = (Button) findViewById(R.id.btnDisConnect);
+
+         btnConnect.setOnClickListener(new View.OnClickListener() {
+             @Override
+             public void onClick(View v) {
+                 textviewSocket.setText("");
+                 connectThread = new Thread(new SocketConnectThread());
+                 connectThread.start();
+             }
+         });
+
+         btnDisconnect.setOnClickListener(new View.OnClickListener() {
+             @Override
+             public void onClick(View v) {
+                 try {
+                     if (socket != null) {
+                         socket.close();
+                         socket = null;
+                     }
+                     if (m_inputReader != null) {
+                         m_inputReader.close();
+                         m_inputReader = null;
+                     }
+                     if (m_outputWriter != null) {
+                         m_outputWriter.close();
+                         m_outputWriter = null;
+                     }
+                     textviewSocket.setText("Disconnected");
+                 } catch (IOException e) {
+                     e.printStackTrace();
+                 }
+             }
+         });
+
+         btnSend.setOnClickListener(new View.OnClickListener() {
+             @Override
+             public void onClick(View v) {
+                 String message = "Enable Stream";
+                 if (!message.isEmpty()) {
+                     writeThread = new Thread(new SocketWriteThread(message));
+                     writeThread.start();
+                 }
+             }
+         });
+
+//        btnSend.setOnClickListener(new View.OnClickListener() {
+//			public void onClick(View v) {
+//				// get the text message on the text field
+//				String message = editMessage.getText().toString();
+//				// start the Thread to connect to server
+//				new Thread(new ClientThread(message)).start();
+//
+//			}
+//		});
+
+
         // display public ip address
         TextView textViewIp = (TextView)this.findViewById(R.id.textView_ip);
-        textViewIp.setText("IP: [" + this.getDeviceIP() + "]\nMac: [" + this.getDeviceMac() + "]");
+        String displayIpString = "IP: [" + this.getDeviceIP() + "] | Mac: [" + this.getDeviceMac() + "]";
+        textViewIp.setText(displayIpString);
 
         ImageButton play = (ImageButton) this.findViewById(R.id.button_play);
         play.setOnClickListener(new OnClickListener() {
@@ -156,4 +242,121 @@ public class Dashcam extends Activity implements SurfaceHolder.Callback {
         WifiManager wifi_manager = (WifiManager)getApplicationContext().getSystemService(WIFI_SERVICE);
         return wifi_manager.getConnectionInfo().getMacAddress();
     }
+
+     class SocketConnectThread implements Runnable {
+         public void run() {
+             try {
+                 socket = new Socket(SERVER_IP, SERVER_PORT);
+                 m_outputWriter = new PrintWriter(socket.getOutputStream());
+                 m_inputReader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                 runOnUiThread(new Runnable() {
+                     @Override
+                     public void run() {
+                         textviewSocket.setText("Connected");
+                     }
+                 });
+                 new Thread(new SocketReadThread()).start();
+             } catch (IOException e) {
+                 e.printStackTrace();
+             }
+         }
+     }
+
+     class SocketReadThread implements Runnable {
+         @Override
+         public void run() {
+             while (true) {
+                 if ((socket == null) || (m_inputReader == null) || ((m_outputWriter == null)))  {
+                     continue;
+                 }
+
+                 try {
+                     final String message = m_inputReader.readLine();
+                     if (message != null) {
+                         runOnUiThread(new Runnable() {
+                             @Override
+                             public void run() {
+                                 textviewSocket.append("server: " + message + " ");
+                             }
+                         });
+                     } else {
+                         connectThread = new Thread(new SocketConnectThread());
+                         connectThread.start();
+                         return;
+                     }
+                 } catch (IOException e) {
+                     e.printStackTrace();
+                 }
+             }
+         }
+     }
+
+     class SocketWriteThread implements Runnable {
+         private String message;
+         SocketWriteThread(String message) {
+             this.message = message;
+         }
+         @Override
+         public void run() {
+             if ((socket == null) || (m_inputReader == null) || ((m_outputWriter == null))) {
+                 Log.d("Dashcam","Socket is null in SocketWriteThread");
+                 return;
+             }
+
+             String msg = editMessage.getText().toString() + "\r\n";
+             m_outputWriter.flush();
+             m_outputWriter.write(msg);
+             runOnUiThread(new Runnable() {
+                 @Override
+                 public void run() {
+                     String msg = editMessage.getText().toString();
+                     textviewSocket.setText("Sent: " + msg);
+                 }
+             });
+         }
+     }
+
+//    class ClientThread implements Runnable {
+//		private final String message;
+//
+//		ClientThread(String message) {
+//			this.message = message;
+//		}
+//		@Override
+//		public void run() {
+//			try {
+//				// the IP and port should be correct to have a connection established
+//				// Creates a stream socket and connects it to the specified port number on the named host.
+//                String server = editFieldIp.getText().toString();
+//                String port = editFieldPort.getText().toString();
+//
+//                if ((Objects.equals(server, "")) || (Objects.equals(port, ""))){
+//                    client = new Socket(SERVER_IP, SERVER_PORT); // connect to server
+//                }
+//                else {
+//                    client = new Socket(server, Integer.valueOf(port));
+//                }
+//				printwriter = new PrintWriter(client.getOutputStream(),true);
+//				printwriter.write(message); // write the message to output stream
+//
+//				printwriter.flush();
+//				printwriter.close();
+//
+//				// closing the connection
+//				client.close();
+//
+//			} catch (IOException e) {
+//				e.printStackTrace();
+//			}
+//
+//			// updating the UI
+//			runOnUiThread(new Runnable() {
+//				@Override
+//				public void run() {
+//                    String msg = "sent: " + message;
+//					textviewSocket.setText(msg);
+//				}
+//			});
+//		}
+//	}
 }

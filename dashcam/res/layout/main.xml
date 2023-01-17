@@ -6,6 +6,12 @@
     android:orientation="vertical" >
 
     <TextView
+        android:id="@+id/textViewSocket"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Disconnected" />
+
+    <TextView
         android:id="@+id/textview_message"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -34,6 +40,27 @@
             android:contentDescription="@string/button_stop"
             android:src="@android:drawable/ic_media_pause"
             android:text="@string/button_stop" />
+
+        <Button
+            android:id="@+id/btnSend"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Send" />
+
+        <Button
+            android:id="@+id/btnConnect"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Connect" />
+
+        <Button
+            android:id="@+id/btnDisConnect"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Disconnect" />
+
     </LinearLayout>
 
     <org.freedesktop.gstreamer.dashcam.GStreamerSurfaceView
@@ -47,5 +74,38 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="TextView" />
+
+    <EditText
+        android:id="@+id/editMessage"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ems="10"
+        android:hint="message"
+        android:inputType="textPersonName" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="horizontal">
+
+        <EditText
+            android:id="@+id/editFieldIp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:ems="10"
+            android:hint="10.0.0.100"
+            android:inputType="textPersonName"
+            android:minHeight="48dp" />
+
+        <EditText
+            android:id="@+id/eidtFieldPort"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:ems="10"
+            android:hint="8080"
+            android:inputType="textPersonName"
+            android:minHeight="48dp" />
+
+    </LinearLayout>
 
 </LinearLayout>
