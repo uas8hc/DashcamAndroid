@@ -27,12 +27,19 @@ import org.freedesktop.gstreamer.GStreamer;
 
 public class Dashcam extends Activity implements SurfaceHolder.Callback {
     private native void nativeInit(String ip);     // Initialize native code, build pipeline, etc
+
     private native void nativeFinalize(); // Destroy pipeline and shutdown native code
+
     private native void nativePlay();     // Set pipeline to PLAYING
+
     private native void nativePause();    // Set pipeline to PAUSED
+
     private static native boolean nativeClassInit(); // Initialize native class: cache Method IDs for callbacks
+
     private native void nativeSurfaceInit(Object surface);
+
     private native void nativeSurfaceFinalize();
+
     private long native_custom_data;      // Native code will use this to keep private data
 
     private boolean is_playing_desired;   // Whether the user asked to go to PLAYING
@@ -53,8 +60,7 @@ public class Dashcam extends Activity implements SurfaceHolder.Callback {
     // Called when the activity is first created.
     @SuppressLint("SetTextI18n")
     @Override
-    public void onCreate(Bundle savedInstanceState)
-    {
+    public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
         // Initialize GStreamer and warn if it fails
@@ -76,48 +82,54 @@ public class Dashcam extends Activity implements SurfaceHolder.Callback {
         btnConnect = (Button) findViewById(R.id.btnConnect);
         btnDisconnect = (Button) findViewById(R.id.btnDisConnect);
 
-         btnConnect.setOnClickListener(new View.OnClickListener() {
-             @Override
-             public void onClick(View v) {
-                 textviewSocket.setText("");
-                 connectThread = new Thread(new SocketConnectThread());
-                 connectThread.start();
-             }
-         });
+        btnConnect.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                textviewSocket.setText("");
+                connectThread = new Thread(new SocketConnectThread());
+                connectThread.start();
+            }
+        });
 
-         btnDisconnect.setOnClickListener(new View.OnClickListener() {
-             @Override
-             public void onClick(View v) {
-                 try {
-                     if (socket != null) {
-                         socket.close();
-                         socket = null;
-                     }
-                     if (m_inputReader != null) {
-                         m_inputReader.close();
-                         m_inputReader = null;
-                     }
-                     if (m_outputWriter != null) {
-                         m_outputWriter.close();
-                         m_outputWriter = null;
-                     }
-                     textviewSocket.setText("Disconnected");
-                 } catch (IOException e) {
-                     e.printStackTrace();
-                 }
-             }
-         });
+        btnDisconnect.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                try {
+                    if (socket != null) {
+                        m_outputWriter.write("Disconnect");
+                        socket.close();
+                        socket = null;
+                    }
+                    if (m_inputReader != null) {
+                        m_inputReader.close();
+                        m_inputReader = null;
+                    }
+                    if (m_outputWriter != null) {
+                        m_outputWriter.close();
+                        m_outputWriter = null;
+                    }
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            textviewSocket.setText("Disconnected");
+                        }
+                    });
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        });
 
-         btnSend.setOnClickListener(new View.OnClickListener() {
-             @Override
-             public void onClick(View v) {
-                 String message = "Enable Stream";
-                 if (!message.isEmpty()) {
-                     writeThread = new Thread(new SocketWriteThread(message));
-                     writeThread.start();
-                 }
-             }
-         });
+        btnSend.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                String message = "Enable Stream";
+                if (!message.isEmpty()) {
+                    writeThread = new Thread(new SocketWriteThread(message));
+                    writeThread.start();
+                }
+            }
+        });
 
 //        btnSend.setOnClickListener(new View.OnClickListener() {
 //			public void onClick(View v) {
@@ -131,7 +143,7 @@ public class Dashcam extends Activity implements SurfaceHolder.Callback {
 
 
         // display public ip address
-        TextView textViewIp = (TextView)this.findViewById(R.id.textView_ip);
+        TextView textViewIp = (TextView) this.findViewById(R.id.textView_ip);
         String displayIpString = "IP: [" + this.getDeviceIP() + "] | Mac: [" + this.getDeviceMac() + "]";
         textViewIp.setText(displayIpString);
 
@@ -157,10 +169,10 @@ public class Dashcam extends Activity implements SurfaceHolder.Callback {
 
         if (savedInstanceState != null) {
             is_playing_desired = savedInstanceState.getBoolean("playing");
-            Log.i ("GStreamer", "Activity created. Saved state is playing:" + is_playing_desired);
+            Log.i("GStreamer", "Activity created. Saved state is playing:" + is_playing_desired);
         } else {
             is_playing_desired = false;
-            Log.i ("GStreamer", "Activity created. There is no saved state, playing: false");
+            Log.i("GStreamer", "Activity created. There is no saved state, playing: false");
         }
 
         // Start with disabled buttons, until native code is initialized
@@ -170,8 +182,8 @@ public class Dashcam extends Activity implements SurfaceHolder.Callback {
         nativeInit(this.getDeviceIP());
     }
 
-    protected void onSaveInstanceState (Bundle outState) {
-        Log.d ("GStreamer", "Saving state, playing:" + is_playing_desired);
+    protected void onSaveInstanceState(Bundle outState) {
+        Log.d("GStreamer", "Saving state, playing:" + is_playing_desired);
         outState.putBoolean("playing", is_playing_desired);
     }
 
@@ -183,17 +195,17 @@ public class Dashcam extends Activity implements SurfaceHolder.Callback {
     // Called from native code. This sets the content of the TextView from the UI thread.
     private void setMessage(final String message) {
         final TextView tv = (TextView) this.findViewById(R.id.textview_message);
-        runOnUiThread (new Runnable() {
-          public void run() {
-            tv.setText(message);
-          }
+        runOnUiThread(new Runnable() {
+            public void run() {
+                tv.setText(message);
+            }
         });
     }
 
     // Called from native code. Native code calls this once it has created its pipeline and
     // the main loop is running, so it is ready to accept commands.
-    private void onGStreamerInitialized () {
-        Log.i ("GStreamer", "Gst initialized. Restoring state, playing:" + is_playing_desired);
+    private void onGStreamerInitialized() {
+        Log.i("GStreamer", "Gst initialized. Restoring state, playing:" + is_playing_desired);
         // Restore previous playing state
         if (is_playing_desired) {
             nativePlay();
@@ -218,10 +230,10 @@ public class Dashcam extends Activity implements SurfaceHolder.Callback {
     }
 
     public void surfaceChanged(SurfaceHolder holder, int format, int width,
-            int height) {
+                               int height) {
         Log.d("GStreamer", "Surface changed to format " + format + " width "
                 + width + " height " + height);
-        nativeSurfaceInit (holder.getSurface());
+        nativeSurfaceInit(holder.getSurface());
     }
 
     public void surfaceCreated(SurfaceHolder holder) {
@@ -230,91 +242,124 @@ public class Dashcam extends Activity implements SurfaceHolder.Callback {
 
     public void surfaceDestroyed(SurfaceHolder holder) {
         Log.d("GStreamer", "Surface destroyed");
-        nativeSurfaceFinalize ();
+        nativeSurfaceFinalize();
     }
 
     public String getDeviceIP() {
-        WifiManager wifi_manager = (WifiManager)getApplicationContext().getSystemService(WIFI_SERVICE);
+        WifiManager wifi_manager = (WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
         return Formatter.formatIpAddress(wifi_manager.getConnectionInfo().getIpAddress());
     }
 
     public String getDeviceMac() {
-        WifiManager wifi_manager = (WifiManager)getApplicationContext().getSystemService(WIFI_SERVICE);
+        WifiManager wifi_manager = (WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
         return wifi_manager.getConnectionInfo().getMacAddress();
     }
 
-     class SocketConnectThread implements Runnable {
-         public void run() {
-             try {
-                 socket = new Socket(SERVER_IP, SERVER_PORT);
-                 m_outputWriter = new PrintWriter(socket.getOutputStream());
-                 m_inputReader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                 runOnUiThread(new Runnable() {
-                     @Override
-                     public void run() {
-                         textviewSocket.setText("Connected");
-                     }
-                 });
-                 new Thread(new SocketReadThread()).start();
-             } catch (IOException e) {
-                 e.printStackTrace();
-             }
-         }
-     }
+    class SocketConnectThread implements Runnable {
+        public void run() {
+            try {
+                if (socket == null) {
+                    String server = editFieldIp.getText().toString();
+                    String port = editFieldPort.getText().toString();
 
-     class SocketReadThread implements Runnable {
-         @Override
-         public void run() {
-             while (true) {
-                 if ((socket == null) || (m_inputReader == null) || ((m_outputWriter == null)))  {
-                     continue;
-                 }
+                    if ((Objects.equals(server, "")) || (Objects.equals(port, ""))) {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                String msg = "Connecting to " + SERVER_IP + ":" + SERVER_PORT;
+                                textviewSocket.setText(msg);
+                            }
+                        });
+                        socket = new Socket(SERVER_IP, SERVER_PORT); // connect to server
+                    } else {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                String msg = "Connecting to " + server + ":" + port;
+                                textviewSocket.setText(msg);
+                            }
+                        });
+                        socket = new Socket(server, Integer.valueOf(port));
+                    }
+                    m_outputWriter = new PrintWriter(socket.getOutputStream());
+                    m_inputReader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            textviewSocket.setText("Connected");
+                        }
+                    });
+                    new Thread(new SocketReadThread()).start();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            if (socket == null) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        textviewSocket.setText("Connection Failed");
+                    }
+                });
+            }
+        }
+    }
 
-                 try {
-                     final String message = m_inputReader.readLine();
-                     if (message != null) {
-                         runOnUiThread(new Runnable() {
-                             @Override
-                             public void run() {
-                                 textviewSocket.append("server: " + message + " ");
-                             }
-                         });
-                     } else {
-                         connectThread = new Thread(new SocketConnectThread());
-                         connectThread.start();
-                         return;
-                     }
-                 } catch (IOException e) {
-                     e.printStackTrace();
-                 }
-             }
-         }
-     }
+    class SocketReadThread implements Runnable {
+        @Override
+        public void run() {
+            while (true) {
+                if ((socket == null) || (m_inputReader == null) || ((m_outputWriter == null))) {
+                    continue;
+                }
 
-     class SocketWriteThread implements Runnable {
-         private String message;
-         SocketWriteThread(String message) {
-             this.message = message;
-         }
-         @Override
-         public void run() {
-             if ((socket == null) || (m_inputReader == null) || ((m_outputWriter == null))) {
-                 Log.d("Dashcam","Socket is null in SocketWriteThread");
-                 return;
-             }
+                try {
+                    final String message = m_inputReader.readLine();
+                    if (message != null) {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                textviewSocket.append("server: " + message + " ");
+                            }
+                        });
+                    } else {
+                        connectThread = new Thread(new SocketConnectThread());
+                        connectThread.start();
+                        return;
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
 
-             String msg = editMessage.getText().toString() + "\r\n";
-             m_outputWriter.flush();
-             m_outputWriter.write(msg);
-             runOnUiThread(new Runnable() {
-                 @Override
-                 public void run() {
-                     String msg = editMessage.getText().toString();
-                     textviewSocket.setText("Sent: " + msg);
-                 }
-             });
-         }
-     }
+    class SocketWriteThread implements Runnable {
+        private String message;
+
+        SocketWriteThread(String message) {
+            this.message = message;
+        }
+
+        @Override
+        public void run() {
+            if ((socket == null) || (m_inputReader == null) || ((m_outputWriter == null))) {
+                Log.d("Dashcam", "Socket is null in SocketWriteThread");
+                return;
+            }
+
+            String msg = editMessage.getText().toString();
+            m_outputWriter.write(msg);
+            m_outputWriter.flush();
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    String msg = editMessage.getText().toString();
+                    textviewSocket.setText("Sent: " + msg);
+                }
+            });
+        }
+    }
 
 //    class ClientThread implements Runnable {
 //		private final String message;
