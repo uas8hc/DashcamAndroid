@@ -1,7 +1,15 @@
 package org.freedesktop.gstreamer.dashcam;
 
 import android.annotation.SuppressLint;
+import android.app.Application;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.content.Context;
+import android.content.Intent;
 import android.net.wifi.WifiManager;
+import android.os.Build;
 import android.text.format.Formatter;
 import android.app.Activity;
 import android.os.Bundle;
@@ -16,16 +24,28 @@ import android.widget.Toast;
 import android.widget.Button;
 import android.widget.EditText;
 
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.NotificationCompat;
+
+import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.Task;
+import com.google.firebase.messaging.FirebaseMessaging;
+import com.google.firebase.messaging.FirebaseMessagingService;
+import com.google.firebase.messaging.RemoteMessage;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
+import java.util.Map;
 import java.util.Objects;
 
 import org.freedesktop.gstreamer.GStreamer;
 
 public class Dashcam extends Activity implements SurfaceHolder.Callback {
+
     private native void nativeInit(String ip);     // Initialize native code, build pipeline, etc
 
     private native void nativeFinalize(); // Destroy pipeline and shutdown native code
@@ -73,7 +93,85 @@ public class Dashcam extends Activity implements SurfaceHolder.Callback {
         }
 
         setContentView(R.layout.main);
+        class MyApllication extends Application{
+            public static final String CHANNEL_ID = "push_notification_id";
+            @Override
+            public void onCreate() {
+                super.onCreate();
+                createChannelNotification();
+            }
 
+            private void createChannelNotification() {
+                if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "PushNotification", NotificationManager.IMPORTANCE_DEFAULT);
+                    NotificationManager manager = getSystemService(NotificationManager.class);
+                    manager.createNotificationChannel(channel);
+                }
+            }
+        }
+
+        final String TAG = MyFirebaseMessagingService.class.getName();
+        FirebaseMessaging.getInstance().getToken()
+                .addOnCompleteListener(new OnCompleteListener<String>() {
+                    @Override
+                    public void onComplete(@NonNull Task<String> task) {
+                        if (!task.isSuccessful()) {
+                            Log.w(TAG, "Fetching FCM registration token failed", task.getException());
+                            return;
+                        }
+
+                        // Get new FCM registration token
+                        String token = task.getResult();
+
+                        // Log and toast
+                        Log.e(TAG, token);
+                    }
+                });
+        class MyFirebaseMessagingService extends FirebaseMessagingService {
+            public static final String TAG = Dashcam.MyFirebaseMessagingService.class.getName();
+            @Override
+            public void onMessageReceived(@NonNull RemoteMessage remoteMessage) {
+                super.onMessageReceived(remoteMessage);
+//        RemoteMessage.Notification notification = message.getNotification();
+//        if (notification == null){
+//            return;
+//        }
+//        String strTitle = notification.getTitle();
+//        String strMessage = notification.getBody();
+
+
+                //Data Messages
+                Map<String, String> stringMap = remoteMessage.getData();
+                String title = stringMap.get("user-name");
+                String body = stringMap.get("description");
+                sendNotification(title, body);
+            }
+            private void sendNotification(String strTitle, String strMessage) {
+                Intent intent = new Intent(this, Dashcam.MyApllication.class);
+                @SuppressLint("UnspecifiedImmutableFlag")
+                PendingIntent pendingIntent = PendingIntent.getActivity(this,0,intent, PendingIntent.FLAG_UPDATE_CURRENT);
+                NotificationCompat.Builder notificationBuilder = new NotificationCompat.Builder(this, Dashcam.MyApllication.CHANNEL_ID)
+                        .setContentTitle(strTitle)
+                        .setContentText(strMessage)
+                        .setSmallIcon(R.drawable.gstreamer_logo_3)
+                        .setContentIntent(pendingIntent);
+                Notification notification = notificationBuilder.build();
+                NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+                if (notificationManager != null){
+                    notificationManager.notify(1,notification);
+                }
+            }
+
+            @Override
+            public void onNewToken(@NonNull String token) {
+                super.onNewToken(token);
+                Log.d(TAG, "Refreshed token: " + token);
+
+                // If you want to send messages to this application instance or
+                // manage this apps subscriptions on the server side, send the
+                // FCM registration token to your app server.
+            }
+        };
         editFieldIp = (EditText) findViewById(R.id.editFieldIp);
         editFieldPort = (EditText) findViewById(R.id.eidtFieldPort);
         textviewSocket = (TextView) findViewById(R.id.textViewSocket);
@@ -333,6 +431,102 @@ public class Dashcam extends Activity implements SurfaceHolder.Callback {
             }
         }
     }
+    class MyApllication extends Application{
+        public static final String CHANNEL_ID = "push_notification_id";
+        @Override
+        public void onCreate() {
+            super.onCreate();
+            createChannelNotification();
+        }
+
+        private void createChannelNotification() {
+            if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "PushNotification", NotificationManager.IMPORTANCE_DEFAULT);
+                NotificationManager manager = getSystemService(NotificationManager.class);
+                manager.createNotificationChannel(channel);
+            }
+        }
+    }
+
+    class MyFirebaseMessagingService extends FirebaseMessagingService {
+        public static final String TAG = MyFirebaseMessagingService.class.getName();
+        @Override
+        public void onMessageReceived(@NonNull RemoteMessage remoteMessage) {
+            super.onMessageReceived(remoteMessage);
+//        RemoteMessage.Notification notification = message.getNotification();
+//        if (notification == null){
+//            return;
+//        }
+//        String strTitle = notification.getTitle();
+//        String strMessage = notification.getBody();
+
+
+            //Data Messages
+            Map<String, String> stringMap = remoteMessage.getData();
+            String title = stringMap.get("user-name");
+            String body = stringMap.get("description");
+            sendNotification(title, body);
+        }
+        private void sendNotification(String strTitle, String strMessage) {
+            Intent intent = new Intent(this, MyApllication.class);
+            @SuppressLint("UnspecifiedImmutableFlag")
+            PendingIntent pendingIntent = PendingIntent.getActivity(this,0,intent, PendingIntent.FLAG_UPDATE_CURRENT);
+            NotificationCompat.Builder notificationBuilder = new NotificationCompat.Builder(this, MyApllication.CHANNEL_ID)
+                    .setContentTitle(strTitle)
+                    .setContentText(strMessage)
+                    .setSmallIcon(R.drawable.gstreamer_logo_3)
+                    .setContentIntent(pendingIntent);
+            Notification notification = notificationBuilder.build();
+            NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (notificationManager != null){
+                notificationManager.notify(1,notification);
+            }
+        }
+
+        @Override
+        public void onNewToken(@NonNull String token) {
+            super.onNewToken(token);
+            Log.d(TAG, "Refreshed token: " + token);
+
+            // If you want to send messages to this application instance or
+            // manage this apps subscriptions on the server side, send the
+            // FCM registration token to your app server.
+        }
+    }
+    class MainActivity extends AppCompatActivity {
+
+        public static final String TAG = MyFirebaseMessagingService.class.getName();
+        @Override
+        protected void onCreate(Bundle savedInstanceState) {
+            super.onCreate(savedInstanceState);
+
+
+
+
+
+            FirebaseMessaging.getInstance().getToken()
+                    .addOnCompleteListener(new OnCompleteListener<String>() {
+                        @Override
+                        public void onComplete(@NonNull Task<String> task) {
+                            if (!task.isSuccessful()) {
+                                Log.w(TAG, "Fetching FCM registration token failed", task.getException());
+                                return;
+                            }
+
+                            // Get new FCM registration token
+                            String token = task.getResult();
+
+                            // Log and toast
+                            Log.e(TAG, token);
+                        }
+                    });
+
+        }
+
+
+
+
+    }
 
     class SocketWriteThread implements Runnable {
         private String message;
@@ -360,6 +554,8 @@ public class Dashcam extends Activity implements SurfaceHolder.Callback {
             });
         }
     }
+
+
 
 //    class ClientThread implements Runnable {
 //		private final String message;

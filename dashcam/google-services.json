@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "174185412323",
+    "project_id": "notificationfirebaseoffical",
+    "storage_bucket": "notificationfirebaseoffical.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:174185412323:android:f2d16ad9e30c2c24c7f7d6",
+        "android_client_info": {
+          "package_name": "org.freedesktop.gstreamer.dashcam"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "174185412323-0f2628400faiivk06ee4nub6p1pta2df.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "org.freedesktop.gstreamer.dashcam",
+            "certificate_hash": "3552b30f686a15cd43dc31455455a7a48485bc57"
+          }
+        },
+        {
+          "client_id": "174185412323-kfrjrklj9jsl04n6sc1r1uo65tkshomb.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAv63K15CEsTOPsRttBc_TSxKU9iOHR7cw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "174185412323-kfrjrklj9jsl04n6sc1r1uo65tkshomb.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
